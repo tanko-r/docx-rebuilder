@@ -174,7 +174,8 @@ class DocxRebuilder:
                 new_para = self._rebuild_paragraph(
                     para,
                     normalize_styles=normalize_styles,
-                    preserve_cross_refs=preserve_cross_refs
+                    preserve_cross_refs=preserve_cross_refs,
+                    para_index=item_index
                 )
                 new_body_children.append(new_para)
 
@@ -204,7 +205,8 @@ class DocxRebuilder:
 
     def _rebuild_paragraph(self, para: Paragraph,
                            normalize_styles: bool,
-                           preserve_cross_refs: bool) -> etree._Element:
+                           preserve_cross_refs: bool,
+                           para_index: int = -1) -> etree._Element:
         """Rebuild a paragraph with clean formatting."""
         p = etree.Element(f'{{{NAMESPACES["w"]}}}p')
 
@@ -216,7 +218,7 @@ class DocxRebuilder:
         # Handle bookmarks at start
         if preserve_cross_refs:
             for bm_name, bookmark in self.structure.bookmarks.items():
-                if bookmark.start_para_index == self.structure.paragraphs.index(para):
+                if bookmark.start_para_index == para_index:
                     start_elem, _ = self.crossref_handler.rebuild_bookmark(
                         bookmark, p
                     )
@@ -230,7 +232,7 @@ class DocxRebuilder:
         # Handle bookmarks at end
         if preserve_cross_refs:
             for bm_name, bookmark in self.structure.bookmarks.items():
-                if bookmark.end_para_index == self.structure.paragraphs.index(para):
+                if bookmark.end_para_index == para_index:
                     _, end_elem = self.crossref_handler.rebuild_bookmark(
                         bookmark, p
                     )

@@ -20,6 +20,7 @@ from .parser import (
 from .analyzer import FormattingAnalyzer, FormattingModel
 from .numbering import NumberingHandler
 from .crossref import CrossReferenceHandler
+from .headers import HeaderFooterHandler, preserve_section_properties
 
 
 class DocxRebuilder:
@@ -37,6 +38,7 @@ class DocxRebuilder:
         self.model: Optional[FormattingModel] = None
         self.numbering_handler: Optional[NumberingHandler] = None
         self.crossref_handler: Optional[CrossReferenceHandler] = None
+        self.header_footer_handler: Optional[HeaderFooterHandler] = None
 
         # Store original XML parts for preservation
         self.original_parts: dict[str, bytes] = {}
@@ -88,7 +90,7 @@ class DocxRebuilder:
         self.model = self.analyzer.analyze()
 
     def _initialize_handlers(self):
-        """Initialize the numbering and cross-reference handlers."""
+        """Initialize the numbering, cross-reference, and header/footer handlers."""
         self.numbering_handler = NumberingHandler(
             self.structure,
             indent_unit=self.model.indent_unit
@@ -97,6 +99,10 @@ class DocxRebuilder:
 
         self.crossref_handler = CrossReferenceHandler(self.structure)
         self.crossref_handler.analyze_references()
+
+        # Initialize header/footer handler
+        self.header_footer_handler = HeaderFooterHandler(self.input_path)
+        self.header_footer_handler.parse()
 
     def _rebuild_document(self, normalize_numbering: bool,
                           normalize_styles: bool,
@@ -544,7 +550,7 @@ class DocxRebuilder:
         if not self.model:
             return {}
 
-        return {
+        report = {
             'base_font': self.model.base_font_name,
             'base_font_size': self.model.base_font_size / 2,  # Convert half-points to points
             'default_alignment': self.model.default_alignment,
@@ -557,3 +563,15 @@ class DocxRebuilder:
             'bookmark_count': len(self.structure.bookmarks),
             'cross_reference_count': len(self.structure.cross_references),
         }
+
+        # Add header/footer info if available
+        if self.header_footer_handler:
+            report['headers_count'] = len(self.header_footer_handler.headers)
+            report['footers_count'] = len(self.header_footer_handler.footers)
+            report['sections_count'] = len(self.header_footer_handler.section_props)
+
+            # Check for page number fields
+            page_fields = self.header_footer_handler.get_page_number_fields()
+            report['page_number_fields'] = len(page_fields)
+
+        return report

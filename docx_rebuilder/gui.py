@@ -204,14 +204,24 @@ class ProgressWindow:
                 return
 
             # Phase 3: Initializing handlers
-            self._update_progress(50, "Processing numbering and references...")
+            self._update_progress(45, "Processing numbering and references...")
             rebuilder._initialize_handlers()
 
             if self._cancelled:
                 return
 
+            # Report what was found
+            report = rebuilder.get_analysis_report()
+            headers_count = report.get('headers_count', 0)
+            footers_count = report.get('footers_count', 0)
+            if headers_count or footers_count:
+                self._update_progress(55, f"Found {headers_count} headers, {footers_count} footers...")
+
+            if self._cancelled:
+                return
+
             # Phase 4: Rebuilding
-            self._update_progress(70, "Rebuilding document...")
+            self._update_progress(70, "Rebuilding document (preserving headers/footers)...")
             rebuilder._rebuild_document(
                 normalize_numbering=True,
                 normalize_styles=True,

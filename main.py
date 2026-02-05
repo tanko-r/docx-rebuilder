@@ -164,6 +164,18 @@ def extract(input_file: Path, output: Path):
     click.echo("\nExtraction complete!")
 
 
+@click.command()
+@click.argument('input_file', type=click.Path(path_type=Path), required=False)
+def gui(input_file: Path):
+    """
+    Launch the graphical user interface.
+
+    Optionally pass a .docx file to open it directly.
+    """
+    from docx_rebuilder.gui import run_gui
+    run_gui(str(input_file) if input_file else None)
+
+
 @click.group()
 def cli():
     """DOCX Rebuilder - Fix Word document formatting for lawyers."""
@@ -172,10 +184,11 @@ def cli():
 
 cli.add_command(main, name='rebuild')
 cli.add_command(extract)
+cli.add_command(gui)
 
 
 if __name__ == '__main__':
     # If called directly, use the rebuild command
-    if len(sys.argv) > 1 and sys.argv[1] not in ['rebuild', 'extract', '--help', '-h']:
+    if len(sys.argv) > 1 and sys.argv[1] not in ['rebuild', 'extract', 'gui', '--help', '-h']:
         sys.argv.insert(1, 'rebuild')
     cli()

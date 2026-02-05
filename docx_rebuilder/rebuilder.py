@@ -108,43 +108,31 @@ class DocxRebuilder:
                           normalize_styles: bool,
                           preserve_cross_refs: bool):
         """Rebuild the document with clean formatting."""
-        # Create a temporary copy of the original document
-        temp_path = self.output_path.with_suffix('.tmp')
-        shutil.copy2(self.input_path, temp_path)
+        # Build replacement parts
+        replacements = {}
 
-        try:
-            with zipfile.ZipFile(temp_path, 'a') as zf:
-                # Rebuild document.xml
-                new_document = self._rebuild_document_xml(
-                    normalize_styles=normalize_styles,
-                    preserve_cross_refs=preserve_cross_refs
-                )
-                self._update_zip_file(zf, 'word/document.xml', new_document)
+        # Rebuild document.xml
+        replacements['word/document.xml'] = self._rebuild_document_xml(
+            normalize_styles=normalize_styles,
+            preserve_cross_refs=preserve_cross_refs
+        )
 
-                # Rebuild styles.xml if normalizing styles
-                if normalize_styles:
-                    new_styles = self._rebuild_styles_xml()
-                    self._update_zip_file(zf, 'word/styles.xml', new_styles)
+        # Rebuild styles.xml if normalizing styles
+        if normalize_styles:
+            replacements['word/styles.xml'] = self._rebuild_styles_xml()
 
-                # Rebuild numbering.xml if normalizing numbering
-                if normalize_numbering and self.structure.numbering_definitions:
-                    new_numbering = self._rebuild_numbering_xml()
-                    self._update_zip_file(zf, 'word/numbering.xml', new_numbering)
+        # Rebuild numbering.xml if normalizing numbering
+        if normalize_numbering and self.structure.numbering_definitions:
+            replacements['word/numbering.xml'] = self._rebuild_numbering_xml()
 
-            # Move temp file to final output
-            shutil.move(temp_path, self.output_path)
-
-        finally:
-            # Clean up temp file if it still exists
-            if temp_path.exists():
-                temp_path.unlink()
-
-    def _update_zip_file(self, zf: zipfile.ZipFile, name: str, content: bytes):
-        """Update a file in the zip archive."""
-        # Remove old file if it exists
-        # Note: zipfile doesn't support removing files directly,
-        # so we need a workaround for existing files
-        zf.writestr(name, content)
+        # Build a brand new zip: copy originals, substituting rebuilt parts
+        with zipfile.ZipFile(self.output_path, 'w', zipfile.ZIP_DEFLATED) as out_zf:
+            with zipfile.ZipFile(self.input_path, 'r') as in_zf:
+                for item in in_zf.infolist():
+                    if item.filename in replacements:
+                        out_zf.writestr(item, replacements[item.filename])
+                    else:
+                        out_zf.writestr(item, in_zf.read(item.filename))
 
     def _rebuild_document_xml(self, normalize_styles: bool,
                                preserve_cross_refs: bool) -> bytes:
@@ -371,20 +359,25 @@ class DocxRebuilder:
         if fmt.font_name:
             font_name = fmt.font_name
             if normalize_styles and fmt.font_name != self.model.base_font_name:
-                # Keep the original font - don't force normalization
-                # Only normalize if we're confident it's an error
-                pass
+                # Replace stray fonts with the document's base font
+                font_name = self.model.base_font_name
 
             rFonts = etree.SubElement(rPr, f'{{{NAMESPACES["w"]}}}rFonts')
             rFonts.set(f'{{{NAMESPACES["w"]}}}ascii', font_name)
             rFonts.set(f'{{{NAMESPACES["w"]}}}hAnsi', font_name)
 
-        # Font size
+        # Font size - normalize near-matches to the base size
         if fmt.font_size:
+            size_val = fmt.font_size
+            if normalize_styles and self.model.base_font_size:
+                # If within 2 half-points (1pt) of the base size, snap to base
+                if abs(fmt.font_size - self.model.base_font_size) <= 2 and fmt.font_size != self.model.base_font_size:
+                    size_val = self.model.base_font_size
+
             sz = etree.SubElement(rPr, f'{{{NAMESPACES["w"]}}}sz')
-            sz.set(f'{{{NAMESPACES["w"]}}}val', str(fmt.font_size))
+            sz.set(f'{{{NAMESPACES["w"]}}}val', str(size_val))
             szCs = etree.SubElement(rPr, f'{{{NAMESPACES["w"]}}}szCs')
-            szCs.set(f'{{{NAMESPACES["w"]}}}val', str(fmt.font_size))
+            szCs.set(f'{{{NAMESPACES["w"]}}}val', str(size_val))
 
         # Bold
         if fmt.bold:

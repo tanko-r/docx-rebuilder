@@ -13,6 +13,7 @@ from pathlib import Path
 import click
 
 from docx_rebuilder import DocxRebuilder
+from docx_rebuilder.manifest import build_manifest
 
 
 @click.command()
@@ -86,22 +87,30 @@ def main(input_file: Path, output: Path, no_normalize_numbering: bool,
             return
 
         # Perform full rebuild
-        output_path = rebuilder.rebuild(
-            normalize_numbering=not no_normalize_numbering,
-            normalize_styles=not no_normalize_styles,
-            preserve_cross_refs=not no_preserve_refs
+        rebuild_options = {
+            'normalize_numbering': not no_normalize_numbering,
+            'normalize_styles': not no_normalize_styles,
+            'preserve_cross_refs': not no_preserve_refs,
+        }
+
+        output_path = rebuilder.rebuild(**rebuild_options)
+
+        # Get report and suggestions for manifest
+        report = rebuilder.get_analysis_report()
+        suggestions = []
+        if rebuilder.analyzer:
+            suggestions = rebuilder.analyzer.suggest_corrections()
+
+        # Print the full manifest
+        manifest = build_manifest(
+            input_path=input_file,
+            output_path=output_path,
+            report=report,
+            suggestions=suggestions,
+            options=rebuild_options,
         )
-
-        click.echo(f"\nDocument rebuilt successfully!")
-        click.echo(f"Output: {output_path}")
-
-        if verbose:
-            report = rebuilder.get_analysis_report()
-            click.echo("\nAnalysis Summary:")
-            click.echo(f"  Paragraphs processed: {report.get('paragraph_count', 0)}")
-            click.echo(f"  Tables preserved: {report.get('table_count', 0)}")
-            click.echo(f"  Cross-references preserved: {report.get('cross_reference_count', 0)}")
-            click.echo(f"  Base font: {report.get('base_font', 'Unknown')}")
+        click.echo("")
+        click.echo(manifest)
 
     except FileNotFoundError as e:
         click.echo(f"Error: File not found - {e}", err=True)

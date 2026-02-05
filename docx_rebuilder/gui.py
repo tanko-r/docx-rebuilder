@@ -10,14 +10,16 @@ from pathlib import Path
 from typing import Optional, Callable
 from datetime import datetime
 
+from .manifest import build_manifest
+
 
 class ManifestWindow:
     """A popup window showing the rebuild manifest/summary."""
 
-    def __init__(self, parent, output_path: Path, report: dict, suggestions: list):
+    def __init__(self, parent, input_path: Path, output_path: Path, report: dict, suggestions: list):
         self.window = tk.Toplevel(parent)
         self.window.title("Rebuild Complete - Manifest")
-        self.window.geometry("550x500")
+        self.window.geometry("580x520")
         self.window.resizable(True, True)
 
         # Center on parent
@@ -25,13 +27,13 @@ class ManifestWindow:
         self.window.grab_set()
 
         # Make it modal
-        x = parent.winfo_x() + (parent.winfo_width() - 550) // 2
-        y = parent.winfo_y() + (parent.winfo_height() - 500) // 2
-        self.window.geometry(f"550x500+{x}+{y}")
+        x = parent.winfo_x() + (parent.winfo_width() - 580) // 2
+        y = parent.winfo_y() + (parent.winfo_height() - 520) // 2
+        self.window.geometry(f"580x520+{x}+{y}")
 
-        self._setup_ui(output_path, report, suggestions)
+        self._setup_ui(input_path, output_path, report, suggestions)
 
-    def _setup_ui(self, output_path: Path, report: dict, suggestions: list):
+    def _setup_ui(self, input_path: Path, output_path: Path, report: dict, suggestions: list):
         """Set up the manifest UI."""
         main_frame = ttk.Frame(self.window, padding="15")
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -75,8 +77,8 @@ class ManifestWindow:
         )
         self.manifest_text.pack(fill=tk.BOTH, expand=True)
 
-        # Build manifest content
-        manifest = self._build_manifest(report, suggestions)
+        # Build manifest content using shared builder
+        manifest = build_manifest(input_path, output_path, report, suggestions)
         self.manifest_text.insert(tk.END, manifest)
         self.manifest_text.config(state=tk.DISABLED)
 
@@ -101,93 +103,6 @@ class ManifestWindow:
             text="Close",
             command=self.window.destroy
         ).pack(side=tk.RIGHT)
-
-    def _build_manifest(self, report: dict, suggestions: list) -> str:
-        """Build the manifest text content."""
-        lines = []
-        lines.append("=" * 50)
-        lines.append("DOCX REBUILDER - CONVERSION MANIFEST")
-        lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        lines.append("=" * 50)
-        lines.append("")
-
-        # Document Statistics
-        lines.append("DOCUMENT STATISTICS")
-        lines.append("-" * 30)
-        lines.append(f"  Paragraphs processed:    {report.get('paragraph_count', 0)}")
-        lines.append(f"  Tables preserved:        {report.get('table_count', 0)}")
-        lines.append(f"  Bookmarks found:         {report.get('bookmark_count', 0)}")
-        lines.append(f"  Cross-references:        {report.get('cross_reference_count', 0)}")
-        lines.append("")
-
-        # Headers/Footers
-        headers = report.get('headers_count', 0)
-        footers = report.get('footers_count', 0)
-        sections = report.get('sections_count', 0)
-        page_fields = report.get('page_number_fields', 0)
-
-        lines.append("HEADERS & FOOTERS")
-        lines.append("-" * 30)
-        lines.append(f"  Headers preserved:       {headers}")
-        lines.append(f"  Footers preserved:       {footers}")
-        lines.append(f"  Sections:                {sections}")
-        lines.append(f"  Page number fields:      {page_fields}")
-        lines.append("")
-
-        # Formatting Analysis
-        lines.append("FORMATTING ANALYSIS")
-        lines.append("-" * 30)
-        lines.append(f"  Base font detected:      {report.get('base_font', 'Unknown')}")
-        lines.append(f"  Base font size:          {report.get('base_font_size', 0)}pt")
-        lines.append(f"  Default alignment:       {report.get('default_alignment', 'left')}")
-        lines.append(f"  Indent unit:             {report.get('indent_unit', 720)} twips")
-        lines.append(f"  Heading styles found:    {report.get('heading_styles_detected', 0)}")
-        lines.append(f"  Numbering schemes:       {report.get('numbering_schemes', 0)}")
-        lines.append("")
-
-        # What was done
-        lines.append("ACTIONS PERFORMED")
-        lines.append("-" * 30)
-        lines.append("  [✓] Parsed document structure")
-        lines.append("  [✓] Analyzed formatting conventions")
-        lines.append("  [✓] Normalized numbering schemes")
-        lines.append("  [✓] Preserved cross-references")
-        lines.append("  [✓] Preserved headers and footers")
-        lines.append("  [✓] Preserved page numbering")
-        lines.append("  [✓] Rebuilt clean OOXML structure")
-        lines.append("  [✓] Preserved table formatting")
-        lines.append("  [✓] Maintained character formatting")
-        lines.append("")
-
-        # Issues detected (if any)
-        if suggestions:
-            lines.append("FORMATTING CORRECTIONS APPLIED")
-            lines.append("-" * 30)
-            # Group by type
-            indent_fixes = [s for s in suggestions if s.get('type') == 'indent_correction']
-            font_fixes = [s for s in suggestions if s.get('type') == 'font_correction']
-
-            if indent_fixes:
-                lines.append(f"  Indentation normalized:  {len(indent_fixes)} instances")
-            if font_fixes:
-                lines.append(f"  Font inconsistencies:    {len(font_fixes)} instances")
-
-            # Show first few details
-            lines.append("")
-            lines.append("  Details (first 5):")
-            for s in suggestions[:5]:
-                lines.append(f"    - {s.get('message', 'Unknown correction')}")
-            if len(suggestions) > 5:
-                lines.append(f"    ... and {len(suggestions) - 5} more corrections")
-            lines.append("")
-
-        # Footer
-        lines.append("=" * 50)
-        lines.append("The rebuilt document should now have consistent")
-        lines.append("formatting that works properly with MS Word.")
-        lines.append("=" * 50)
-
-        return "\n".join(lines)
 
     def _open_location(self, path: Path):
         """Open the file location in Explorer."""
@@ -440,7 +355,7 @@ class ProgressWindow:
 
             # Show manifest window
             def show_manifest():
-                ManifestWindow(self.root, output_path, final_report, suggestions)
+                ManifestWindow(self.root, input_path, output_path, final_report, suggestions)
             self.root.after(0, show_manifest)
 
         except Exception as e:
